@@ -1,0 +1,1248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <base target="_self">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IMees - Instant Messaging</title>
+    <meta name="description" content="IMees - Modern instant messaging application with real-time chat features">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: "#3B82F6",
+                        "primary-dark": "#1D4ED8",
+                        secondary: "#10B981",
+                        "secondary-dark": "#059669",
+                        accent: "#8B5CF6",
+                        "accent-dark": "#7C3AED",
+                        background: "#F9FAFB",
+                        "background-dark": "#1F2937",
+                        surface: "#FFFFFF",
+                        "surface-dark": "#374151",
+                        text: "#111827",
+                        "text-light": "#6B7280",
+                        "text-dark": "#F9FAFB"
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                        mono: ['Fira Code', 'monospace']
+                    },
+                    animation: {
+                        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                        'slide-in': 'slideIn 0.3s ease-out',
+                        'fade-in': 'fadeIn 0.5s ease-out'
+                    },
+                    keyframes: {
+                        slideIn: {
+                            '0%': { transform: 'translateX(-100%)', opacity: '0' },
+                            '100%': { transform: 'translateX(0)', opacity: '1' }
+                        },
+                        fadeIn: {
+                            '0%': { opacity: '0' },
+                            '100%': { opacity: '1' }
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap');
+        
+        .scrollbar-thin {
+            scrollbar-width: thin;
+            scrollbar-color: #D1D5DB #F3F4F6;
+        }
+        
+        .scrollbar-thin::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        .scrollbar-thin::-webkit-scrollbar-track {
+            background: #F3F4F6;
+            border-radius: 3px;
+        }
+        
+        .scrollbar-thin::-webkit-scrollbar-thumb {
+            background: #D1D5DB;
+            border-radius: 3px;
+        }
+        
+        .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+            background: #9CA3AF;
+        }
+        
+        .message-bubble {
+            max-width: 70%;
+            word-wrap: break-word;
+        }
+        
+        .typing-indicator {
+            display: inline-flex;
+            align-items: center;
+        }
+        
+        .typing-indicator span {
+            height: 8px;
+            width: 8px;
+            margin: 0 2px;
+            background-color: #9CA3AF;
+            border-radius: 50%;
+            display: inline-block;
+            animation: typing 1.4s infinite ease-in-out both;
+        }
+        
+        .typing-indicator span:nth-child(1) {
+            animation-delay: -0.32s;
+        }
+        
+        .typing-indicator span:nth-child(2) {
+            animation-delay: -0.16s;
+        }
+        
+        @keyframes typing {
+            0%, 80%, 100% { 
+                transform: scale(0);
+                opacity: 0.5;
+            }
+            40% { 
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+        
+        .online-status {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            position: absolute;
+            bottom: 0;
+            right: 0;
+            border: 2px solid white;
+        }
+        
+        .online-status.online {
+            background-color: #10B981;
+        }
+        
+        .online-status.away {
+            background-color: #F59E0B;
+        }
+        
+        .online-status.offline {
+            background-color: #9CA3AF;
+        }
+        
+        .message-status {
+            font-size: 12px;
+            margin-left: 4px;
+        }
+        
+        .message-status.sent {
+            color: #9CA3AF;
+        }
+        
+        .message-status.delivered {
+            color: #3B82F6;
+        }
+        
+        .message-status.read {
+            color: #10B981;
+        }
+        
+        @media (max-width: 768px) {
+            .chat-container {
+                height: calc(100vh - 140px);
+            }
+            
+            .contacts-sidebar {
+                position: fixed;
+                left: -100%;
+                top: 0;
+                width: 100%;
+                height: 100%;
+                z-index: 50;
+                transition: left 0.3s ease;
+            }
+            
+            .contacts-sidebar.active {
+                left: 0;
+            }
+            
+            .overlay {
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background-color: rgba(0, 0, 0, 0.5);
+                z-index: 40;
+                display: none;
+            }
+            
+            .overlay.active {
+                display: block;
+            }
+        }
+    </style>
+</head>
+<body class="min-h-screen bg-background font-sans text-text">
+    <!-- Overlay for mobile sidebar -->
+    <div class="overlay" id="overlay"></div>
+    
+    <!-- Main Container -->
+    <div class="flex flex-col h-screen">
+        <!-- Header -->
+        <header class="bg-surface shadow-sm border-b border-gray-200">
+            <div class="container mx-auto px-4">
+                <div class="flex items-center justify-between py-3">
+                    <!-- Logo and App Name -->
+                    <div class="flex items-center space-x-3">
+                        <button id="menuToggle" class="md:hidden text-text-light hover:text-primary focus:outline-none">
+                            <i class="fas fa-bars text-xl"></i>
+                        </button>
+                        <div class="flex items-center space-x-2">
+                            <div class="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
+                                <i class="fas fa-comment-alt text-white"></i>
+                            </div>
+                            <h1 class="text-xl font-bold text-text">IMees</h1>
+                        </div>
+                    </div>
+                    
+                    <!-- Search Bar -->
+                    <div class="hidden md:flex flex-1 max-w-md mx-4">
+                        <div class="relative w-full">
+                            <input 
+                                type="text" 
+                                placeholder="Search messages, contacts..." 
+                                class="w-full px-4 py-2 pl-10 bg-gray-100 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                                id="searchInput"
+                            >
+                            <i class="fas fa-search absolute left-3 top-3 text-gray-400"></i>
+                        </div>
+                    </div>
+                    
+                    <!-- User Actions -->
+                    <div class="flex items-center space-x-4">
+                        <!-- Mobile Search Button -->
+                        <button class="md:hidden text-text-light hover:text-primary" id="mobileSearchBtn">
+                            <i class="fas fa-search text-xl"></i>
+                        </button>
+                        
+                        <!-- Notifications -->
+                        <div class="relative">
+                            <button class="text-text-light hover:text-primary relative" id="notificationsBtn">
+                                <i class="fas fa-bell text-xl"></i>
+                                <span class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">3</span>
+                            </button>
+                            <!-- Notifications Dropdown -->
+                            <div class="absolute right-0 mt-2 w-80 bg-surface shadow-lg rounded-lg border border-gray-200 hidden z-10" id="notificationsDropdown">
+                                <div class="p-4 border-b border-gray-200">
+                                    <h3 class="font-semibold text-text">Notifications</h3>
+                                </div>
+                                <div class="max-h-64 overflow-y-auto">
+                                    <!-- Notification items will be populated by JS -->
+                                </div>
+                                <div class="p-3 border-t border-gray-200 text-center">
+                                    <a href="#" class="text-primary hover:text-primary-dark text-sm font-medium">View All</a>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- User Profile -->
+                        <div class="relative">
+                            <button class="flex items-center space-x-2 focus:outline-none" id="profileBtn">
+                                <div class="relative">
+                                    <img 
+                                        src="https://picsum.photos/40?random=1" 
+                                        alt="User profile" 
+                                        class="w-8 h-8 rounded-full"
+                                    >
+                                    <div class="online-status online"></div>
+                                </div>
+                                <span class="hidden md:inline font-medium text-text">John Doe</span>
+                                <i class="fas fa-chevron-down text-text-light text-sm"></i>
+                            </button>
+                            <!-- Profile Dropdown -->
+                            <div class="absolute right-0 mt-2 w-48 bg-surface shadow-lg rounded-lg border border-gray-200 hidden z-10" id="profileDropdown">
+                                <div class="py-2">
+                                    <a href="#" class="flex items-center px-4 py-2 text-text hover:bg-gray-100">
+                                        <i class="fas fa-user-circle mr-3 text-text-light"></i>
+                                        <span>My Profile</span>
+                                    </a>
+                                    <a href="#" class="flex items-center px-4 py-2 text-text hover:bg-gray-100">
+                                        <i class="fas fa-cog mr-3 text-text-light"></i>
+                                        <span>Settings</span>
+                                    </a>
+                                    <a href="#" class="flex items-center px-4 py-2 text-text hover:bg-gray-100">
+                                        <i class="fas fa-moon mr-3 text-text-light"></i>
+                                        <span>Dark Mode</span>
+                                    </a>
+                                    <div class="border-t border-gray-200 my-1"></div>
+                                    <a href="#" class="flex items-center px-4 py-2 text-red-600 hover:bg-gray-100">
+                                        <i class="fas fa-sign-out-alt mr-3"></i>
+                                        <span>Logout</span>
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Mobile Search Bar -->
+                <div class="md:hidden py-3 hidden" id="mobileSearchBar">
+                    <div class="relative">
+                        <input 
+                            type="text" 
+                            placeholder="Search messages, contacts..." 
+                            class="w-full px-4 py-2 pl-10 bg-gray-100 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                        >
+                        <i class="fas fa-search absolute left-3 top-3 text-gray-400"></i>
+                    </div>
+                </div>
+            </div>
+        </header>
+        
+        <!-- Main Content -->
+        <main class="flex flex-1 overflow-hidden">
+            <!-- Contacts Sidebar -->
+            <aside class="contacts-sidebar w-full md:w-80 bg-surface border-r border-gray-200 flex flex-col md:static md:block">
+                <!-- Sidebar Header -->
+                <div class="p-4 border-b border-gray-200">
+                    <div class="flex items-center justify-between">
+                        <h2 class="text-lg font-semibold text-text">Chats</h2>
+                        <button class="text-primary hover:text-primary-dark" id="newChatBtn">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                    </div>
+                    
+                    <!-- Chat Filters -->
+                    <div class="flex space-x-2 mt-4">
+                        <button class="px-3 py-1 bg-primary text-white rounded-full text-sm font-medium">All</button>
+                        <button class="px-3 py-1 bg-gray-100 text-text-light hover:bg-gray-200 rounded-full text-sm font-medium">Unread</button>
+                        <button class="px-3 py-1 bg-gray-100 text-text-light hover:bg-gray-200 rounded-full text-sm font-medium">Groups</button>
+                    </div>
+                </div>
+                
+                <!-- Contacts List -->
+                <div class="flex-1 overflow-y-auto scrollbar-thin" id="contactsList">
+                    <!-- Contacts will be populated by JavaScript -->
+                </div>
+                
+                <!-- Sidebar Footer -->
+                <div class="p-4 border-t border-gray-200">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center space-x-3">
+                            <div class="relative">
+                                <img 
+                                    src="https://picsum.photos/40?random=1" 
+                                    alt="User profile" 
+                                    class="w-10 h-10 rounded-full"
+                                >
+                                <div class="online-status online"></div>
+                            </div>
+                            <div>
+                                <p class="font-medium text-text">John Doe</p>
+                                <p class="text-xs text-text-light">Online</p>
+                            </div>
+                        </div>
+                        <button class="text-text-light hover:text-primary" id="sidebarSettingsBtn">
+                            <i class="fas fa-ellipsis-v"></i>
+                        </button>
+                    </div>
+                </div>
+            </aside>
+            
+            <!-- Chat Area -->
+            <div class="flex-1 flex flex-col">
+                <!-- Chat Header -->
+                <div class="bg-surface border-b border-gray-200 p-4">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center space-x-3">
+                            <button class="md:hidden text-text-light hover:text-primary" id="backToContacts">
+                                <i class="fas fa-arrow-left"></i>
+                            </button>
+                            <div class="relative">
+                                <img 
+                                    src="https://picsum.photos/48?random=2" 
+                                    alt="Sarah Johnson profile" 
+                                    class="w-12 h-12 rounded-full"
+                                >
+                                <div class="online-status online"></div>
+                            </div>
+                            <div>
+                                <h2 class="font-semibold text-text" id="currentChatName">Sarah Johnson</h2>
+                                <p class="text-sm text-text-light" id="currentChatStatus">Online - Last seen 2 min ago</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center space-x-4">
+                            <button class="text-text-light hover:text-primary">
+                                <i class="fas fa-phone-alt"></i>
+                            </button>
+                            <button class="text-text-light hover:text-primary">
+                                <i class="fas fa-video"></i>
+                            </button>
+                            <button class="text-text-light hover:text-primary" id="chatInfoBtn">
+                                <i class="fas fa-info-circle"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Messages Container -->
+                <div class="flex-1 overflow-y-auto p-4 bg-gray-50 chat-container scrollbar-thin" id="messagesContainer">
+                    <!-- Messages will be populated by JavaScript -->
+                </div>
+                
+                <!-- Typing Indicator -->
+                <div class="px-4 py-2 hidden" id="typingIndicator">
+                    <div class="flex items-center space-x-2">
+                        <div class="relative">
+                            <img 
+                                src="https://picsum.photos/32?random=2" 
+                                alt="Typing user" 
+                                class="w-8 h-8 rounded-full"
+                            >
+                        </div>
+                        <div class="bg-gray-200 rounded-2xl rounded-tl-none px-4 py-2">
+                            <div class="typing-indicator">
+                                <span></span>
+                                <span></span>
+                                <span></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Message Input -->
+                <div class="bg-surface border-t border-gray-200 p-4">
+                    <div class="flex items-center space-x-3">
+                        <button class="text-text-light hover:text-primary">
+                            <i class="fas fa-plus-circle text-xl"></i>
+                        </button>
+                        <button class="text-text-light hover:text-primary">
+                            <i class="fas fa-image text-xl"></i>
+                        </button>
+                        <button class="text-text-light hover:text-primary">
+                            <i class="fas fa-paperclip text-xl"></i>
+                        </button>
+                        
+                        <div class="flex-1 relative">
+                            <input 
+                                type="text" 
+                                placeholder="Type a message..." 
+                                class="w-full px-4 py-3 bg-gray-100 rounded-full border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                                id="messageInput"
+                            >
+                            <button class="absolute right-3 top-3 text-text-light hover:text-primary">
+                                <i class="far fa-smile text-xl"></i>
+                            </button>
+                        </div>
+                        
+                        <button class="bg-primary hover:bg-primary-dark text-white rounded-full w-10 h-10 flex items-center justify-center" id="sendMessageBtn">
+                            <i class="fas fa-paper-plane"></i>
+                        </button>
+                    </div>
+                    
+                    <!-- Quick Actions -->
+                    <div class="flex items-center justify-between mt-3 text-xs text-text-light">
+                        <div class="flex space-x-4">
+                            <button class="hover:text-primary">
+                                <i class="fas fa-microphone mr-1"></i>
+                                Voice Message
+                            </button>
+                            <button class="hover:text-primary">
+                                <i class="fas fa-map-marker-alt mr-1"></i>
+                                Location
+                            </button>
+                        </div>
+                        <div>
+                            <span>Press Enter to send</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Chat Info Sidebar (Hidden on mobile by default) -->
+            <aside class="hidden lg:block w-80 bg-surface border-l border-gray-200" id="chatInfoSidebar">
+                <div class="p-4 border-b border-gray-200">
+                    <div class="flex items-center justify-between">
+                        <h3 class="font-semibold text-text">Chat Info</h3>
+                        <button class="text-text-light hover:text-primary" id="closeChatInfo">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="p-4">
+                    <!-- Chat Participant Info -->
+                    <div class="text-center mb-6">
+                        <img 
+                            src="https://picsum.photos/100?random=2" 
+                            alt="Sarah Johnson profile" 
+                            class="w-24 h-24 rounded-full mx-auto mb-3"
+                        >
+                        <h4 class="font-semibold text-text text-lg">Sarah Johnson</h4>
+                        <p class="text-text-light text-sm">Product Designer at TechCorp</p>
+                        <div class="flex items-center justify-center mt-2">
+                            <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                <span class="w-2 h-2 bg-green-500 rounded-full mr-1"></span>
+                                Online
+                            </span>
+                        </div>
+                    </div>
+                    
+                    <!-- Media, Files, Links -->
+                    <div class="space-y-4">
+                        <div>
+                            <h5 class="font-medium text-text mb-2">Media, Files & Links</h5>
+                            <div class="grid grid-cols-3 gap-2">
+                                <img src="https://picsum.photos/80?random=10" alt="Media 1" class="rounded-lg">
+                                <img src="https://picsum.photos/80?random=11" alt="Media 2" class="rounded-lg">
+                                <img src="https://picsum.photos/80?random=12" alt="Media 3" class="rounded-lg">
+                                <div class="bg-gray-100 rounded-lg flex items-center justify-center h-20">
+                                    <span class="text-text-light">+12 more</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Shared Files -->
+                        <div>
+                            <h5 class="font-medium text-text mb-2">Shared Files</h5>
+                            <div class="space-y-2">
+                                <div class="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
+                                    <div class="flex items-center">
+                                        <i class="fas fa-file-pdf text-red-500 mr-3"></i>
+                                        <div>
+                                            <p class="text-sm font-medium text-text">Project_Brief.pdf</p>
+                                            <p class="text-xs text-text-light">2.4 MB • 2 days ago</p>
+                                        </div>
+                                    </div>
+                                    <button class="text-text-light hover:text-primary">
+                                        <i class="fas fa-download"></i>
+                                    </button>
+                                </div>
+                                <div class="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
+                                    <div class="flex items-center">
+                                        <i class="fas fa-file-image text-blue-500 mr-3"></i>
+                                        <div>
+                                            <p class="text-sm font-medium text-text">Design_Mockup.png</p>
+                                            <p class="text-xs text-text-light">1.8 MB • 1 week ago</p>
+                                        </div>
+                                    </div>
+                                    <button class="text-text-light hover:text-primary">
+                                        <i class="fas fa-download"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Chat Settings -->
+                        <div>
+                            <h5 class="font-medium text-text mb-2">Chat Settings</h5>
+                            <div class="space-y-2">
+                                <button class="flex items-center justify-between w-full p-2 hover:bg-gray-50 rounded-lg">
+                                    <div class="flex items-center">
+                                        <i class="fas fa-bell text-text-light mr-3"></i>
+                                        <span class="text-text">Mute Notifications</span>
+                                    </div>
+                                    <i class="fas fa-chevron-right text-text-light"></i>
+                                </button>
+                                <button class="flex items-center justify-between w-full p-2 hover:bg-gray-50 rounded-lg">
+                                    <div class="flex items-center">
+                                        <i class="fas fa-search text-text-light mr-3"></i>
+                                        <span class="text-text">Search in Chat</span>
+                                    </div>
+                                    <i class="fas fa-chevron-right text-text-light"></i>
+                                </button>
+                                <button class="flex items-center justify-between w-full p-2 hover:bg-gray-50 rounded-lg text-red-600">
+                                    <div class="flex items-center">
+                                        <i class="fas fa-trash-alt mr-3"></i>
+                                        <span>Clear Chat History</span>
+                                    </div>
+                                    <i class="fas fa-chevron-right"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+        </main>
+        
+        <!-- New Chat Modal -->
+        <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center hidden z-50" id="newChatModal">
+            <div class="bg-surface rounded-lg shadow-xl w-full max-w-md mx-4">
+                <div class="p-6">
+                    <h3 class="text-lg font-semibold text-text mb-4">New Chat</h3>
+                    <div class="mb-4">
+                        <input 
+                            type="text" 
+                            placeholder="Search contacts..." 
+                            class="w-full px-4 py-2 bg-gray-100 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                            id="newChatSearch"
+                        >
+                    </div>
+                    <div class="max-h-64 overflow-y-auto mb-4">
+                        <!-- Contact list for new chat will be populated by JS -->
+                    </div>
+                    <div class="flex justify-end space-x-3">
+                        <button class="px-4 py-2 text-text-light hover:text-text" id="cancelNewChat">
+                            Cancel
+                        </button>
+                        <button class="px-4 py-2 bg-primary hover:bg-primary-dark text-white rounded-lg" id="startNewChat">
+                            Start Chat
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Define data at the beginning
+        const contacts = [
+            {
+                "id": 1,
+                "name": "Sarah Johnson",
+                "avatar": "https://picsum.photos/40?random=2",
+                "lastMessage": "Can you review the design mockups?",
+                "timestamp": "10:30 AM",
+                "unreadCount": 3,
+                "status": "online",
+                "isTyping": false
+            },
+            {
+                "id": 2,
+                "name": "Michael Chen",
+                "avatar": "https://picsum.photos/40?random=3",
+                "lastMessage": "Meeting at 2 PM tomorrow",
+                "timestamp": "Yesterday",
+                "unreadCount": 0,
+                "status": "online",
+                "isTyping": false
+            },
+            {
+                "id": 3,
+                "name": "Emma Wilson",
+                "avatar": "https://picsum.photos/40?random=4",
+                "lastMessage": "Thanks for your help!",
+                "timestamp": "2 days ago",
+                "unreadCount": 1,
+                "status": "away",
+                "isTyping": false
+            },
+            {
+                "id": 4,
+                "name": "Design Team",
+                "avatar": "https://picsum.photos/40?random=5",
+                "lastMessage": "Alex: Let's discuss the new features",
+                "timestamp": "3 days ago",
+                "unreadCount": 0,
+                "status": "group",
+                "isTyping": true,
+                "isGroup": true,
+                "members": 8
+            },
+            {
+                "id": 5,
+                "name": "Robert Davis",
+                "avatar": "https://picsum.photos/40?random=6",
+                "lastMessage": "The report is ready for review",
+                "timestamp": "Last week",
+                "unreadCount": 0,
+                "status": "offline",
+                "isTyping": false
+            },
+            {
+                "id": 6,
+                "name": "Lisa Park",
+                "avatar": "https://picsum.photos/40?random=7",
+                "lastMessage": "Let's catch up this weekend",
+                "timestamp": "Last week",
+                "unreadCount": 0,
+                "status": "online",
+                "isTyping": false
+            },
+            {
+                "id": 7,
+                "name": "Marketing Group",
+                "avatar": "https://picsum.photos/40?random=8",
+                "lastMessage": "Sarah: Campaign results are in",
+                "timestamp": "2 weeks ago",
+                "unreadCount": 12,
+                "status": "group",
+                "isTyping": false,
+                "isGroup": true,
+                "members": 15
+            },
+            {
+                "id": 8,
+                "name": "David Miller",
+                "avatar": "https://picsum.photos/40?random=9",
+                "lastMessage": "Call me when you're free",
+                "timestamp": "1 month ago",
+                "unreadCount": 0,
+                "status": "offline",
+                "isTyping": false
+            }
+        ];
+
+        const messages = [
+            {
+                "id": 1,
+                "contactId": 1,
+                "sender": "Sarah Johnson",
+                "avatar": "https://picsum.photos/32?random=2",
+                "content": "Hi there! How are you doing?",
+                "timestamp": "9:30 AM",
+                "isOwn": false,
+                "status": "read"
+            },
+            {
+                "id": 2,
+                "contactId": 1,
+                "sender": "You",
+                "avatar": "https://picsum.photos/32?random=1",
+                "content": "I'm doing great! Just finished the project proposal.",
+                "timestamp": "9:32 AM",
+                "isOwn": true,
+                "status": "read"
+            },
+            {
+                "id": 3,
+                "contactId": 1,
+                "sender": "Sarah Johnson",
+                "avatar": "https://picsum.photos/32?random=2",
+                "content": "That's awesome! Can you share it with me? I'd love to take a look.",
+                "timestamp": "9:33 AM",
+                "isOwn": false,
+                "status": "read"
+            },
+            {
+                "id": 4,
+                "contactId": 1,
+                "sender": "You",
+                "avatar": "https://picsum.photos/32?random=1",
+                "content": "Sure, I'll send it over right now. It's about 15 pages long.",
+                "timestamp": "9:35 AM",
+                "isOwn": true,
+                "status": "read"
+            },
+            {
+                "id": 5,
+                "contactId": 1,
+                "sender": "Sarah Johnson",
+                "avatar": "https://picsum.photos/32?random=2",
+                "content": "Perfect! I'll review it this afternoon. Also, don't forget about our meeting tomorrow at 2 PM.",
+                "timestamp": "9:36 AM",
+                "isOwn": false,
+                "status": "read"
+            },
+            {
+                "id": 6,
+                "contactId": 1,
+                "sender": "You",
+                "avatar": "https://picsum.photos/32?random=1",
+                "content": "I've already added it to my calendar. Looking forward to it!",
+                "timestamp": "9:37 AM",
+                "isOwn": true,
+                "status": "read"
+            },
+            {
+                "id": 7,
+                "contactId": 1,
+                "sender": "Sarah Johnson",
+                "avatar": "https://picsum.photos/32?random=2",
+                "content": "Great! By the way, can you review the design mockups I sent yesterday?",
+                "timestamp": "10:30 AM",
+                "isOwn": false,
+                "status": "delivered"
+            }
+        ];
+
+        const notifications = [
+            {
+                "id": 1,
+                "title": "New Message",
+                "message": "Sarah Johnson sent you a message",
+                "time": "2 minutes ago",
+                "read": false,
+                "type": "message"
+            },
+            {
+                "id": 2,
+                "title": "Group Update",
+                "message": "Design Team added new members",
+                "time": "1 hour ago",
+                "read": false,
+                "type": "group"
+            },
+            {
+                "id": 3,
+                "title": "Voice Call",
+                "message": "Missed call from Michael Chen",
+                "time": "3 hours ago",
+                "read": true,
+                "type": "call"
+            },
+            {
+                "id": 4,
+                "title": "File Received",
+                "message": "Robert Davis shared a document",
+                "time": "Yesterday",
+                "read": true,
+                "type": "file"
+            }
+        ];
+
+        // Current state
+        let currentChatId = 1;
+        let currentUser = {
+            "id": 0,
+            "name": "John Doe",
+            "avatar": "https://picsum.photos/32?random=1",
+            "status": "online"
+        };
+
+        // DOM Elements
+        const contactsList = document.getElementById('contactsList');
+        const messagesContainer = document.getElementById('messagesContainer');
+        const messageInput = document.getElementById('messageInput');
+        const sendMessageBtn = document.getElementById('sendMessageBtn');
+        const searchInput = document.getElementById('searchInput');
+        const notificationsBtn = document.getElementById('notificationsBtn');
+        const notificationsDropdown = document.getElementById('notificationsDropdown');
+        const profileBtn = document.getElementById('profileBtn');
+        const profileDropdown = document.getElementById('profileDropdown');
+        const menuToggle = document.getElementById('menuToggle');
+        const contactsSidebar = document.querySelector('.contacts-sidebar');
+        const overlay = document.getElementById('overlay');
+        const backToContacts = document.getElementById('backToContacts');
+        const chatInfoBtn = document.getElementById('chatInfoBtn');
+        const chatInfoSidebar = document.getElementById('chatInfoSidebar');
+        const closeChatInfo = document.getElementById('closeChatInfo');
+        const newChatBtn = document.getElementById('newChatBtn');
+        const newChatModal = document.getElementById('newChatModal');
+        const cancelNewChat = document.getElementById('cancelNewChat');
+        const startNewChat = document.getElementById('startNewChat');
+        const newChatSearch = document.getElementById('newChatSearch');
+        const mobileSearchBtn = document.getElementById('mobileSearchBtn');
+        const mobileSearchBar = document.getElementById('mobileSearchBar');
+        const typingIndicator = document.getElementById('typingIndicator');
+        const currentChatName = document.getElementById('currentChatName');
+        const currentChatStatus = document.getElementById('currentChatStatus');
+
+        // Initialize the application
+        function initApp() {
+            renderContacts();
+            renderMessages(currentChatId);
+            renderNotifications();
+            setupEventListeners();
+            updateCurrentChatInfo();
+        }
+
+        // Render contacts list
+        function renderContacts(filter = '') {
+            contactsList.innerHTML = '';
+            
+            const filteredContacts = contacts.filter(contact => 
+                contact.name.toLowerCase().includes(filter.toLowerCase())
+            );
+            
+            filteredContacts.forEach(contact => {
+                const contactElement = document.createElement('div');
+                contactElement.className = `p-4 border-b border-gray-100 hover:bg-gray-50 cursor-pointer transition-colors ${contact.id === currentChatId ? 'bg-blue-50' : ''}`;
+                contactElement.dataset.contactId = contact.id;
+                
+                const statusClass = contact.status === 'online' ? 'online' : 
+                                  contact.status === 'away' ? 'away' : 'offline';
+                
+                contactElement.innerHTML = `
+                    <div class="flex items-center space-x-3">
+                        <div class="relative">
+                            <img 
+                                src="${contact.avatar}" 
+                                alt="${contact.name}" 
+                                class="w-12 h-12 rounded-full"
+                            >
+                            ${contact.status !== 'group' ? `<div class="online-status ${statusClass}"></div>` : ''}
+                            ${contact.isGroup ? `
+                                <div class="absolute -bottom-1 -right-1 bg-primary text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                                    <i class="fas fa-users text-xs"></i>
+                                </div>
+                            ` : ''}
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <div class="flex justify-between items-start">
+                                <h4 class="font-medium text-text truncate">${contact.name}</h4>
+                                <span class="text-xs text-text-light whitespace-nowrap">${contact.timestamp}</span>
+                            </div>
+                            <div class="flex justify-between items-center mt-1">
+                                <p class="text-sm text-text-light truncate">
+                                    ${contact.isTyping ? 
+                                        '<span class="text-primary font-medium"><i class="fas fa-circle text-xs mr-1"></i>Typing...</span>' : 
+                                        contact.lastMessage}
+                                </p>
+                                ${contact.unreadCount > 0 ? `
+                                    <span class="bg-primary text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                                        ${contact.unreadCount}
+                                    </span>
+                                ` : ''}
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                contactElement.addEventListener('click', () => {
+                    currentChatId = contact.id;
+                    renderContacts();
+                    renderMessages(currentChatId);
+                    updateCurrentChatInfo();
+                    
+                    // On mobile, hide contacts sidebar when a chat is selected
+                    if (window.innerWidth < 768) {
+                        contactsSidebar.classList.remove('active');
+                        overlay.classList.remove('active');
+                    }
+                });
+                
+                contactsList.appendChild(contactElement);
+            });
+        }
+
+        // Render messages for a specific chat
+        function renderMessages(contactId) {
+            messagesContainer.innerHTML = '';
+            
+            const chatMessages = messages.filter(msg => msg.contactId === contactId);
+            
+            chatMessages.forEach(message => {
+                const messageElement = document.createElement('div');
+                messageElement.className = `flex ${message.isOwn ? 'justify-end' : 'justify-start'} mb-4 animate-fade-in`;
+                
+                if (!message.isOwn) {
+                    messageElement.innerHTML = `
+                        <div class="flex items-end space-x-2 max-w-full">
+                            <img 
+                                src="${message.avatar}" 
+                                alt="${message.sender}" 
+                                class="w-8 h-8 rounded-full flex-shrink-0"
+                            >
+                            <div class="message-bubble bg-white border border-gray-200 rounded-2xl rounded-tl-none px-4 py-2">
+                                <p class="text-text">${message.content}</p>
+                                <div class="flex justify-end items-center mt-1">
+                                    <span class="text-xs text-text-light">${message.timestamp}</span>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    const statusIcon = message.status === 'sent' ? 'fa-check' : 
+                                     message.status === 'delivered' ? 'fa-check-double' : 
+                                     'fa-check-double text-blue-500';
+                    
+                    messageElement.innerHTML = `
+                        <div class="flex items-end space-x-2 max-w-full">
+                            <div class="message-bubble bg-primary text-white rounded-2xl rounded-br-none px-4 py-2">
+                                <p>${message.content}</p>
+                                <div class="flex justify-end items-center mt-1">
+                                    <span class="text-xs opacity-80">${message.timestamp}</span>
+                                    <i class="fas ${statusIcon} text-xs ml-1"></i>
+                                </div>
+                            </div>
+                            <img 
+                                src="${message.avatar}" 
+                                alt="${message.sender}" 
+                                class="w-8 h-8 rounded-full flex-shrink-0"
+                            >
+                        </div>
+                    `;
+                }
+                
+                messagesContainer.appendChild(messageElement);
+            });
+            
+            // Scroll to bottom
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            
+            // Show/hide typing indicator
+            const currentContact = contacts.find(c => c.id === contactId);
+            if (currentContact && currentContact.isTyping) {
+                typingIndicator.classList.remove('hidden');
+            } else {
+                typingIndicator.classList.add('hidden');
+            }
+        }
+
+        // Render notifications
+        function renderNotifications() {
+            const notificationsContainer = notificationsDropdown.querySelector('.max-h-64');
+            notificationsContainer.innerHTML = '';
+            
+            notifications.forEach(notification => {
+                const notificationElement = document.createElement('div');
+                notificationElement.className = `p-4 border-b border-gray-100 hover:bg-gray-50 cursor-pointer ${!notification.read ? 'bg-blue-50' : ''}`;
+                
+                const icon = notification.type === 'message' ? 'fa-comment-alt' :
+                            notification.type === 'group' ? 'fa-users' :
+                            notification.type === 'call' ? 'fa-phone' : 'fa-file';
+                
+                notificationElement.innerHTML = `
+                    <div class="flex items-start space-x-3">
+                        <div class="w-10 h-10 rounded-full bg-primary bg-opacity-10 flex items-center justify-center flex-shrink-0">
+                            <i class="fas ${icon} text-primary"></i>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <h5 class="font-medium text-text">${notification.title}</h5>
+                            <p class="text-sm text-text-light mt-1">${notification.message}</p>
+                            <span class="text-xs text-text-light mt-1 block">${notification.time}</span>
+                        </div>
+                        ${!notification.read ? 
+                            '<div class="w-2 h-2 bg-primary rounded-full flex-shrink-0 mt-2"></div>' : 
+                            ''
+                        }
+                    </div>
+                `;
+                
+                notificationsContainer.appendChild(notificationElement);
+            });
+        }
+
+        // Update current chat info in header
+        function updateCurrentChatInfo() {
+            const currentContact = contacts.find(c => c.id === currentChatId);
+            if (currentContact) {
+                currentChatName.textContent = currentContact.name;
+                
+                if (currentContact.isGroup) {
+                    currentChatStatus.textContent = `${currentContact.members} members • ${currentContact.status === 'online' ? 'Active now' : 'Last seen 2 min ago'}`;
+                } else {
+                    const statusText = currentContact.status === 'online' ? 'Online' :
+                                     currentContact.status === 'away' ? 'Away' : 'Offline';
+                    currentChatStatus.textContent = `${statusText} • Last seen 2 min ago`;
+                }
+            }
+        }
+
+        // Send a new message
+        function sendMessage() {
+            const content = messageInput.value.trim();
+            if (!content) return;
+            
+            const newMessage = {
+                id: messages.length + 1,
+                contactId: currentChatId,
+                sender: "You",
+                avatar: currentUser.avatar,
+                content: content,
+                timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                isOwn: true,
+                status: 'sent'
+            };
+            
+            messages.push(newMessage);
+            renderMessages(currentChatId);
+            messageInput.value = '';
+            
+            // Simulate reply after 1 second
+            setTimeout(() => {
+                const currentContact = contacts.find(c => c.id === currentChatId);
+                if (currentContact) {
+                    const replyMessage = {
+                        id: messages.length + 1,
+                        contactId: currentChatId,
+                        sender: currentContact.name,
+                        avatar: currentContact.avatar,
+                        content: "Thanks for your message! I'll get back to you soon.",
+                        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                        isOwn: false,
+                        status: 'read'
+                    };
+                    messages.push(replyMessage);
+                    renderMessages(currentChatId);
+                }
+            }, 1000);
+            
+            // Update last message in contacts
+            const contactIndex = contacts.findIndex(c => c.id === currentChatId);
+            if (contactIndex !== -1) {
+                contacts[contactIndex].lastMessage = content;
+                contacts[contactIndex].timestamp = "Just now";
+                contacts[contactIndex].unreadCount = 0;
+                renderContacts();
+            }
+        }
+
+        // Setup event listeners
+        function setupEventListeners() {
+            // Send message on button click
+            sendMessageBtn.addEventListener('click', sendMessage);
+            
+            // Send message on Enter key (but allow Shift+Enter for new line)
+            messageInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendMessage();
+                }
+            });
+            
+            // Search contacts
+            searchInput.addEventListener('input', (e) => {
+                renderContacts(e.target.value);
+            });
+            
+            // Toggle notifications dropdown
+            notificationsBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                notificationsDropdown.classList.toggle('hidden');
+                profileDropdown.classList.add('hidden');
+            });
+            
+            // Toggle profile dropdown
+            profileBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                profileDropdown.classList.toggle('hidden');
+                notificationsDropdown.classList.add('hidden');
+            });
+            
+            // Close dropdowns when clicking outside
+            document.addEventListener('click', () => {
+                notificationsDropdown.classList.add('hidden');
+                profileDropdown.classList.add('hidden');
+            });
+            
+            // Mobile menu toggle
+            menuToggle.addEventListener('click', () => {
+                contactsSidebar.classList.add('active');
+                overlay.classList.add('active');
+            });
+            
+            // Overlay click to close sidebar
+            overlay.addEventListener('click', () => {
+                contactsSidebar.classList.remove('active');
+                overlay.classList.remove('active');
+            });
+            
+            // Back to contacts on mobile
+            backToContacts.addEventListener('click', () => {
+                contactsSidebar.classList.add('active');
+                overlay.classList.add('active');
+            });
+            
+            // Toggle chat info sidebar
+            chatInfoBtn.addEventListener('click', () => {
+                chatInfoSidebar.classList.toggle('hidden');
+            });
+            
+            closeChatInfo.addEventListener('click', () => {
+                chatInfoSidebar.classList.add('hidden');
+            });
+            
+            // New chat modal
+            newChatBtn.addEventListener('click', () => {
+                newChatModal.classList.remove('hidden');
+                renderNewChatContacts();
+            });
+            
+            cancelNewChat.addEventListener('click', () => {
+                newChatModal.classList.add('hidden');
+            });
+            
+            startNewChat.addEventListener('click', () => {
+                // In a real app, this would start a new chat
+                alert('Starting new chat...');
+                newChatModal.classList.add('hidden');
+            });
+            
+            // Search in new chat modal
+            newChatSearch.addEventListener('input', (e) => {
+                renderNewChatContacts(e.target.value);
+            });
+            
+            // Mobile search toggle
+            mobileSearchBtn.addEventListener('click', () => {
+                mobileSearchBar.classList.toggle('hidden');
+            });
+            
+            // Close modal on outside click
+            newChatModal.addEventListener('click', (e) => {
+                if (e.target === newChatModal) {
+                    newChatModal.classList.add('hidden');
+                }
+            });
+            
+            // Simulate typing indicator
+            setInterval(() => {
+                const randomContact = contacts[Math.floor(Math.random() * contacts.length)];
+                if (randomContact.id !== currentChatId && Math.random() > 0.7) {
+                    randomContact.isTyping = true;
+                    renderContacts();
+                    
+                    setTimeout(() => {
+                        randomContact.isTyping = false;
+                        renderContacts();
+                    }, 3000);
+                }
+            }, 10000);
+            
+            // Update message status (simulate delivery and read)
+            setInterval(() => {
+                const ownMessages = messages.filter(msg => msg.isOwn && msg.status === 'sent');
+                if (ownMessages.length > 0) {
+                    const randomMessage = ownMessages[Math.floor(Math.random() * ownMessages.length)];
+                    randomMessage.status = 'delivered';
+                    renderMessages(currentChatId);
+                    
+                    setTimeout(() => {
+                        randomMessage.status = 'read';
+                        renderMessages(currentChatId);
+                    }, 2000);
+                }
+            }, 5000);
+        }
+
+        // Render contacts for new chat modal
+        function renderNewChatContacts(filter = '') {
+            const container = newChatModal.querySelector('.max-h-64');
+            container.innerHTML = '';
+            
+            const filteredContacts = contacts.filter(contact => 
+                contact.name.toLowerCase().includes(filter.toLowerCase())
+            );
+            
+            filteredContacts.forEach(contact => {
+                const contactElement = document.createElement('div');
+                contactElement.className = 'flex items-center p-3 hover:bg-gray-50 cursor-pointer rounded-lg';
+                contactElement.innerHTML = `
+                    <div class="relative mr-3">
+                        <img 
+                            src="${contact.avatar}" 
+                            alt="${contact.name}" 
+                            class="w-10 h-10 rounded-full"
+                        >
+                        ${contact.status !== 'group' ? `
+                            <div class="online-status ${contact.status === 'online' ? 'online' : contact.status === 'away' ? 'away' : 'offline'}"></div>
+                        ` : ''}
+                    </div>
+                    <div class="flex-1">
+                        <h4 class="font-medium text-text">${contact.name}</h4>
+                        <p class="text-sm text-text-light">${contact.status === 'online' ? 'Online' : 'Last seen recently'}</p>
+                    </div>
+                    <div class="ml-2">
+                        <input type="checkbox" class="rounded text-primary focus:ring-primary">
+                    </div>
+                `;
+                
+                container.appendChild(contactElement);
+            });
+        }
+
+        // Initialize the app when DOM is loaded
+        document.addEventListener('DOMContentLoaded', initApp);
+    </script>
+</body>
+</html>
